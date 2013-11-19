@@ -38,6 +38,8 @@ void SemOpMul (int semid, int semnum, int value, int flag) {
     ops.sem_flg = flag;
     if ((semop (semid, &ops, 1)) == -1) {
         fprintf (stderr,"\nTerminating\n");
+        shmctl (semid, IPC_RMID, NULL);
+        shmdt (shared);
         exit(EXIT_FAILURE);
     }
 }
@@ -61,12 +63,16 @@ void SemOp (const char type, int semid, int semnum, int flag) {
         if ((semop (semid, &ops, 1)) == -1) {
             if (errno != EAGAIN) {
                 fprintf (stderr,"\nTerminating\n");
+                shmctl (semid, IPC_RMID, NULL);
+                shmdt (shared);
                 exit(EXIT_FAILURE);
             }
             else {
                 semctl (semid, ping, GETALL, ptr);
                 if (ptr [ping] != 2) {
                     fprintf (stderr,"\nPartner was killed\n");
+                    shmctl (semid, IPC_RMID, NULL);
+                    shmdt (shared);
                     exit (EXIT_SUCCESS);
                 }
             }
@@ -95,6 +101,8 @@ int main (int argc, char *argv []) {
         semid = semget (key, nsems, 0);
         if (semid < 0) {
             fprintf (stderr, "Terminating\n");
+            shmctl (semid, IPC_RMID, NULL);
+            shmdt (shared);
             exit(EXIT_FAILURE);
         }
         
