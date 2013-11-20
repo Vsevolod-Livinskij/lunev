@@ -18,7 +18,8 @@ enum semaphore_num {
     mutex = 0,
     full  = 1,
     empty = 2,
-    ping  = 3,
+    ping1 = 3,
+    ping2 = 4,
     nsems
 };
 
@@ -44,41 +45,49 @@ void SemOpMul (int semid, int semnum, int value, int flag) {
     }
 }
 
-void SemOp (const char type, int semid, int semnum, int flag) {
-    sembuf ops;
-    ops.sem_num = semnum;
+void SemOp (const char type, int semid, int semnum, int flag, int ping_num) {
+    sembuf ops [3];
+    
+    ops [0].sem_num = ping_num;
+    ops [0].sem_op  = -2;
+    ops [0].sem_flg = IPC_NOWAIT | SEM_UNDO;
+    
+    ops [1].sem_num = semnum;
     if (type == 'P') {
-        ops.sem_op = -1;
+        ops [1].sem_op = -1;
     }
     else {
-        ops.sem_op = 1;
+        ops [1].sem_op = 1;
     }
-    ops.sem_flg = IPC_NOWAIT;
+    ops [1].sem_flg = 0;
+        
+    ops [2].sem_num = ping_num;
+    ops [2].sem_op  = 2;
+    ops [2].sem_flg = IPC_NOWAIT | SEM_UNDO;
     
-    int tmp = 0;
-    unsigned short *ptr = (unsigned short *) 
-                            calloc (nsems, sizeof (unsigned short));
-    
-    while (tmp == 0) {
-        if ((semop (semid, &ops, 1)) == -1) {
-            if (errno != EAGAIN) {
-                fprintf (stderr,"\nTerminating\n");
-                shmctl (semid, IPC_RMID, NULL);
-                shmdt (shared);
-                exit(EXIT_FAILURE);
-            }
-            else {
-                semctl (semid, ping, GETALL, ptr);
-                if (ptr [ping] != 2) {
-                    fprintf (stderr,"\nPartner was killed\n");
-                    shmctl (semid, IPC_RMID, NULL);
-                    shmdt (shared);
-                    exit (EXIT_SUCCESS);
-                }
-            }
+    if ((semop (semid, ops, 3)) == -1) {
+        if (errno != EAGAIN) {
+            fprintf (stderr,"\nTerminating\n");
+            shmctl (semid, IPC_RMID, NULL);
+            shmdt (shared);
+            exit(EXIT_FAILURE);
         }
         else {
-            tmp = 1;
+            unsigned short *ptr = (unsigned short *) 
+                            calloc (nsems, sizeof (unsigned short));
+            semctl (semid, ping_num, GETALL, ptr);
+            if (ptr [ping_num] != 2) {
+                fprintf (stderr,"\nPartner was killed\n");
+                shmctl (semid, IPC_RMID, NULL);
+                shmdt (shared);
+                exit (EXIT_SUCCESS);
+            }
+            else {
+                fprintf (stderr,"\nSome bugs\n");
+                shmctl (semid, IPC_RMID, NULL);
+                shmdt (shared);
+                exit (EXIT_SUCCESS);
+            }
         }
     }
 }
@@ -94,7 +103,8 @@ int main (int argc, char *argv []) {
                 perror("\nFailed to set value for the semaphore.");
                 exit(EXIT_FAILURE);
             }
-        SemOpMul (semid, ping, 1, SEM_UNDO);
+        SemOpMul (semid, ping1, 1, SEM_UNDO);
+        SemOpMul (semid, ping2, 1, SEM_UNDO);
     }
     else if (errno == EEXIST) {  //someone else got it first
         
@@ -106,14 +116,15 @@ int main (int argc, char *argv []) {
             exit(EXIT_FAILURE);
         }
         
-        SemOpMul (semid, ping, 1, SEM_UNDO);
+        SemOpMul (semid, ping1, 1, SEM_UNDO);
+        SemOpMul (semid, ping2, 1, SEM_UNDO);
         
         unsigned short *ptr = (unsigned short *) 
                             calloc (nsems, sizeof (unsigned short));
         int ready = 0;
         for (int i = 0; i < MAX_RETRIES && !ready; i++){
-            semctl (semid, ping, GETALL, ptr);
-            if (ptr [ping] == 2) {
+            semctl (semid, ping1, GETALL, ptr);
+            if (ptr [ping1] == 2 && ptr [ping2] == 2) {
                 ready = 1;
             }
             else {
@@ -147,28 +158,32 @@ int main (int argc, char *argv []) {
         //writer (Producer)
         int src = open (argv [1], O_RDONLY, 0);
         int ret_num = 1;
+        int count = 0;
         while (ret_num > 0) {
+            count++;
             ret_num = read (src, buffer, buf_size);
-            SemOp ('P', semid, empty, 0);
-            SemOp ('P', semid, mutex, 0);
+            SemOp ('P', semid, empty, 0, ping1);
+            SemOp ('P', semid, mutex, 0, ping1);
             strncpy (shared, buffer, ret_num);
             strncpy (buffer, shared, ret_num);
             fflush (stdout);
-            SemOp ('V', semid, mutex, 0);
-            SemOp ('V', semid, full,  0);
+            SemOp ('V', semid, mutex, 0, ping1);
+            SemOp ('V', semid, full,  0, ping1);
         }
     } 
     else {
         //reader (Consumer)
+        int count = 0;
         while (1) {
-            SemOp ('P', semid, full,  0);
-            SemOp ('P', semid, mutex, 0);
+            count++;
+            SemOp ('P', semid, full,  0, ping2);
+            SemOp ('P', semid, mutex, 0, ping2);
             strncpy (buffer, shared, buf_size);
             printf("%s", buffer);
-            memset (shared, 0, buf_size);
             fflush (stdout);
-            SemOp ('V', semid, mutex, 0);
-            SemOp ('V', semid, empty, 0);
+            memset (shared, 0, buf_size);
+            SemOp ('V', semid, mutex, 0, ping2);
+            SemOp ('V', semid, empty, 0, ping2);
         }
     }
     return 0;
