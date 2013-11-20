@@ -50,14 +50,11 @@ int main(int argc, char *argv []) {
     if (pid == 0) {
         ping = 0;
         
-        sigset_t pipe_set, block_set, alarm_set;
+        sigset_t pipe_set, alarm_set;
         sigemptyset (&pipe_set);
         sigemptyset (&alarm_set);
-        sigfillset (&block_set);
         sigaddset (&pipe_set, SIGPIPE);
         sigaddset (&alarm_set, SIGALRM);
-        sigdelset (&block_set, SIGPIPE);
-        sigdelset (&block_set, SIGALRM);
         sigprocmask (SIG_BLOCK, &pipe_set, NULL);
         sigprocmask (SIG_UNBLOCK, &alarm_set, NULL);
         
@@ -81,7 +78,7 @@ int main(int argc, char *argv []) {
                 
                 sigprocmask (SIG_UNBLOCK, &pipe_set, NULL);
                 if (!ping)
-                    sigsuspend (&block_set);
+                    sigsuspend (&set_empty);
                 sigprocmask (SIG_BLOCK, &pipe_set, NULL);
 
                 unsigned int bit = (buffer [0] & (1 << i)) >> i;
@@ -98,16 +95,12 @@ int main(int argc, char *argv []) {
         zero = 0;
         one  = 0;
         
-        sigset_t usr_set, block_set, chld_set;
+        sigset_t usr_set, chld_set;
         sigemptyset (&usr_set);
         sigemptyset (&chld_set);
-        sigfillset (&block_set);
         sigaddset (&usr_set, SIGUSR1);
         sigaddset (&usr_set, SIGUSR2);
         sigaddset (&chld_set, SIGCHLD);
-        sigdelset (&block_set, SIGUSR1);    
-        sigdelset (&block_set, SIGUSR2);
-        sigdelset (&block_set, SIGCHLD);
         
         struct sigaction usr1_act, usr2_act, die_act;
         memset (&usr1_act, 0, sizeof (usr1_act));
@@ -134,7 +127,7 @@ int main(int argc, char *argv []) {
                 
                 sigprocmask (SIG_UNBLOCK, &usr_set, NULL);
                 if (!zero && !one)
-                    sigsuspend (&block_set);
+                    sigsuspend (&set_empty);
                 sigprocmask (SIG_BLOCK, &usr_set, NULL);
                 
                 if (one == 1) {
