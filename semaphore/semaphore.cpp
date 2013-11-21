@@ -14,12 +14,19 @@
 #define buf_num 1
 #define MAX_RETRIES 10
 
+struct in_data {
+    char buffer [buf_size];
+    int num;
+};
+
 enum semaphore_num {
     mutex = 0,
     full  = 1,
     empty = 2,
     ping1 = 3,
     ping2 = 4,
+    init1 = 5,
+    init2 = 6,
     nsems
 };
 
@@ -30,7 +37,7 @@ union semun {
 };
 
 int semid;
-char *shared;
+in_data *shared;
 
 void SemOpMul (int semid, int semnum, int value, int flag) {
     sembuf ops;
@@ -103,38 +110,25 @@ int main (int argc, char *argv []) {
         semopts [mutex].val = 1;
         semopts [full ].val = 0;
         semopts [empty].val = buf_num;
+        semopts [init1].val = 1;
+        semopts [init2].val = 1;
         
         if (((semctl (semid, mutex, SETVAL, semopts [mutex])) == -1) ||
-            ((semctl (semid, full,  SETVAL, semopts [full])) == -1) ||
-            ((semctl (semid, empty, SETVAL, semopts [empty])) == -1)) {
+            ((semctl (semid, full,  SETVAL, semopts [full ])) == -1) ||
+            ((semctl (semid, empty, SETVAL, semopts [empty])) == -1) ||
+            ((semctl (semid, init1, SETVAL, semopts [init1])) == -1) ||
+            ((semctl (semid, init2, SETVAL, semopts [init2])) == -1)) {
                 perror("\nFailed to set value for the semaphore.");
                 semctl (semid, 0, IPC_RMID, NULL);
                 shmdt (shared);
                 exit(EXIT_FAILURE);
-            }
+        }
             
-        SemOpMul (semid, ping1, 1, SEM_UNDO);
-        SemOpMul (semid, ping2, 1, SEM_UNDO);
+        SemOpMul (semid, ping1,  1, SEM_UNDO);
+        SemOpMul (semid, ping2,  1, SEM_UNDO);
+        SemOpMul (semid, init1, -1, SEM_UNDO);
+        SemOpMul (semid, init2,  0, 0);
         
-        unsigned short *tmp = (unsigned short *) 
-                            calloc (nsems, sizeof (unsigned short));
-        int ready = 0;
-        for (int i = 0; i < MAX_RETRIES && !ready; i++){
-            semctl (semid, ping1, GETALL, tmp);
-            if (tmp [ping1] == 2 && tmp [ping2] == 2) {
-                ready = 1;
-            }
-            else {
-                sleep (1);
-            }
-        }
-        
-        if (!ready) {
-            perror ("Time is out\n");
-            semctl (semid, 0, IPC_RMID, NULL);
-            shmdt (shared);
-            exit (EXIT_FAILURE);
-        }
     }
     else if (errno == EEXIST) {  //someone else got it first
         
@@ -148,26 +142,8 @@ int main (int argc, char *argv []) {
         
         SemOpMul (semid, ping1, 1, SEM_UNDO);
         SemOpMul (semid, ping2, 1, SEM_UNDO);
-        
-        unsigned short *tmp = (unsigned short *) 
-                            calloc (nsems, sizeof (unsigned short));
-        int ready = 0;
-        for (int i = 0; i < MAX_RETRIES && !ready; i++){
-            semctl (semid, ping1, GETALL, tmp);
-            if (tmp [ping1] == 2 && tmp [ping2] == 2) {
-                ready = 1;
-            }
-            else {
-                sleep (1);
-            }
-        }
-        
-        if (!ready) {
-            perror ("Time is out\n");
-            semctl (semid, 0, IPC_RMID, NULL);
-            shmdt (shared);
-            exit (EXIT_FAILURE);
-        }
+        SemOpMul (semid, init2, -1, SEM_UNDO);
+        SemOpMul (semid, init1,  0, 0);
     }
     else {
             semctl (semid, 0, IPC_RMID, NULL);
@@ -178,27 +154,24 @@ int main (int argc, char *argv []) {
             exit(EXIT_FAILURE);
     }
     
-    int shmid = shmget (key, buf_num * buf_size, 0644 | IPC_CREAT);
+    int shmid = shmget (key, sizeof (in_data), 0644 | IPC_CREAT);
     if (shmid == -1) {
         perror("\nFailed to allocate shared memory.");
         semctl (semid, 0, IPC_RMID, NULL);
         shmdt (shared);
         exit(EXIT_FAILURE);
     }
-    shared = (char*) shmat (shmid, NULL, 0);
-        
-    char buffer [buf_size + 1] = {};
-    buffer [buf_size] = '\0';        
+    shared = (in_data*) shmat (shmid, NULL, 0);
     
     if (argc > 1) {
         //writer (Producer)
         int src = open (argv [1], O_RDONLY, 0);
         int ret_num = 1;
         while (ret_num > 0) {
-            ret_num = read (src, buffer, buf_size);
             SemOp ('P', semid, empty, 0, ping1);
             SemOp ('P', semid, mutex, 0, ping1);
-            strncpy (shared, buffer, ret_num);
+            ret_num = read (src, shared -> buffer, buf_size);
+            shared -> num = ret_num;
             SemOp ('V', semid, mutex, 0, ping1);
             SemOp ('V', semid, full,  0, ping1);
         }
@@ -208,10 +181,8 @@ int main (int argc, char *argv []) {
         while (1) {
             SemOp ('P', semid, full,  0, ping2);
             SemOp ('P', semid, mutex, 0, ping2);
-            strncpy (buffer, shared, buf_size);
-            printf("%s", buffer);
+            write (1, shared -> buffer, shared -> num);
             fflush (stdout);
-            memset (shared, 0, buf_size);
             SemOp ('V', semid, mutex, 0, ping2);
             SemOp ('V', semid, empty, 0, ping2);
             
