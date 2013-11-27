@@ -99,51 +99,54 @@ void SemOp (const char type, int semid, int semnum, int flag, int ping_num) {
     }
 }
 
+void SemInit () {
+    union semun semopts [nsems];    
+
+    semopts [mutex].val = 1;
+    semopts [full ].val = 0;
+    semopts [empty].val = buf_num;
+    semopts [ping1].val = 0;
+    semopts [ping2].val = 0;
+    semopts [init1].val = 1;
+    semopts [init2].val = 1;
+    
+    if (((semctl (semid, mutex, SETVAL, semopts [mutex])) == -1) ||
+        ((semctl (semid, full,  SETVAL, semopts [full ])) == -1) ||
+        ((semctl (semid, empty, SETVAL, semopts [empty])) == -1) ||
+        ((semctl (semid, ping1, SETVAL, semopts [ping1])) == -1) ||
+        ((semctl (semid, ping2, SETVAL, semopts [ping2])) == -1) ||
+        ((semctl (semid, init1, SETVAL, semopts [init1])) == -1) ||
+        ((semctl (semid, init2, SETVAL, semopts [init2])) == -1)) {
+            perror("\nFailed to set value for the semaphore.");
+            semctl (semid, 0, IPC_RMID, NULL);
+            shmdt (shared);
+            exit(EXIT_FAILURE);
+    }
+     
+}
+
 int main (int argc, char *argv []) {
     key_t key = ftok (argv [0], 0);
-    
     semid = semget (key, nsems, 0644 | IPC_CREAT | IPC_EXCL);
+    
     if (semid >= 0) { //got it first
-        
-        union semun semopts [nsems];    
-
-        semopts [mutex].val = 1;
-        semopts [full ].val = 0;
-        semopts [empty].val = buf_num;
-        semopts [init1].val = 1;
-        semopts [init2].val = 1;
-        
-        if (((semctl (semid, mutex, SETVAL, semopts [mutex])) == -1) ||
-            ((semctl (semid, full,  SETVAL, semopts [full ])) == -1) ||
-            ((semctl (semid, empty, SETVAL, semopts [empty])) == -1) ||
-            ((semctl (semid, init1, SETVAL, semopts [init1])) == -1) ||
-            ((semctl (semid, init2, SETVAL, semopts [init2])) == -1)) {
-                perror("\nFailed to set value for the semaphore.");
-                semctl (semid, 0, IPC_RMID, NULL);
-                shmdt (shared);
-                exit(EXIT_FAILURE);
-        }
-            
-        SemOpMul (semid, ping1,  1, SEM_UNDO);
-        SemOpMul (semid, ping2,  1, SEM_UNDO);
-        SemOpMul (semid, init1, -1, SEM_UNDO);
-        SemOpMul (semid, init2,  0, 0);
-        
+        SemInit();
     }
     else if (errno == EEXIST) {  //someone else got it first
         
         semid = semget (key, nsems, 0);
+        unsigned short *ptr = (unsigned short *) 
+                            calloc (nsems, sizeof (unsigned short));
+        semctl (semid, mutex, GETALL, ptr);
+        if (ptr [mutex] != 1 || ptr [full] != 0 || ptr [empty] != buf_num) {
+            SemInit();
+        }
         if (semid < 0) {
-            fprintf (stderr, "Terminating\n");
+            fprintf (stderr, "Failed to open semaphore\n");
             semctl (semid, 0, IPC_RMID, NULL);
             shmdt (shared);
             exit(EXIT_FAILURE);
         }
-        
-        SemOpMul (semid, ping1, 1, SEM_UNDO);
-        SemOpMul (semid, ping2, 1, SEM_UNDO);
-        SemOpMul (semid, init2, -1, SEM_UNDO);
-        SemOpMul (semid, init1,  0, 0);
     }
     else {
             semctl (semid, 0, IPC_RMID, NULL);
@@ -164,6 +167,10 @@ int main (int argc, char *argv []) {
     shared = (in_data*) shmat (shmid, NULL, 0);
     
     if (argc > 1) {
+        SemOpMul (semid, ping1,  1, SEM_UNDO);
+        SemOpMul (semid, ping2,  1, SEM_UNDO);
+        SemOpMul (semid, init1, -1, SEM_UNDO);
+        SemOpMul (semid, init2,  0, 0);
         //writer (Producer)
         int src = open (argv [1], O_RDONLY, 0);
         int ret_num = 1;
@@ -178,6 +185,10 @@ int main (int argc, char *argv []) {
     } 
     else {
         //reader (Consumer)
+        SemOpMul (semid, ping2, 1, SEM_UNDO);
+        SemOpMul (semid, ping1, 1, SEM_UNDO);
+        SemOpMul (semid, init2, -1, SEM_UNDO);
+        SemOpMul (semid, init1,  0, 0);
         while (1) {
             SemOp ('P', semid, full,  0, ping2);
             SemOp ('P', semid, mutex, 0, ping2);

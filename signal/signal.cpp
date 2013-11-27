@@ -8,7 +8,6 @@
 #include <sys/fcntl.h>
 #include <iostream>
 
-int ping;
 int zero;
 int one;
 
@@ -21,7 +20,6 @@ void usr2 (int trash) {
 }
 
 void pipe (int trash) {
-    ping = 1;
     alarm (100);
 }
 
@@ -48,7 +46,6 @@ int main(int argc, char *argv []) {
     int pid = fork ();
     
     if (pid == 0) {
-        ping = 0;
         
         sigset_t pipe_set, alarm_set;
         sigemptyset (&pipe_set);
@@ -74,13 +71,8 @@ int main(int argc, char *argv []) {
             ret_num = read (src, buffer, 1);
             
             for (int i = 0; i < 8; i++) {
-                ping = 0;
-                
-                sigprocmask (SIG_UNBLOCK, &pipe_set, NULL);
-                if (!ping)
-                    sigsuspend (&set_empty);
-                sigprocmask (SIG_BLOCK, &pipe_set, NULL);
-
+                sigsuspend (&set_empty);
+ 
                 unsigned int bit = (buffer [0] & (1 << i)) >> i;
                 if (bit == 0) {
                     kill (ppid, SIGUSR1);
@@ -125,10 +117,7 @@ int main(int argc, char *argv []) {
                 zero = 0;
                 one  = 0;
                 
-                sigprocmask (SIG_UNBLOCK, &usr_set, NULL);
-                if (!zero && !one)
-                    sigsuspend (&set_empty);
-                sigprocmask (SIG_BLOCK, &usr_set, NULL);
+                sigsuspend (&set_empty);
                 
                 if (one == 1) {
                     data = data + (1 << i);
@@ -136,7 +125,8 @@ int main(int argc, char *argv []) {
                 
                 kill (pid, SIGPIPE);
             }
-            printf ("%c", data);
+            write (1, &data, sizeof (data));
+            //printf ("%c", data);
             fflush (stdout);
         }  
     }
