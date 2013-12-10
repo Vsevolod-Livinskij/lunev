@@ -44,8 +44,8 @@ void wait_sem (int semid, int sem);
 void set_val (int semid);
 void consume (int semid, in_data *shared);
 void produce (int semid, in_data *shared, int src);
-void P (int semid, int sem, int sem_exist);
-void V (int semid, int sem, int sem_exist);
+void P (int semid, int sem, int sem_mod, int sem_exist);
+void V (int semid, int sem, int sem_mod, int sem_exist);
 
 int main (int argc, char *argv []) {
     key_t key = ftok (argv [0], 0);
@@ -151,14 +151,14 @@ in_data* init_shm (key_t key) {
 void produce (int semid, in_data *shared, int src) {
     while(1)
     {
-        P (semid, empty, reader);
+        P (semid, empty, full, reader);
         //printf("%d\n", semctl(semid, mutex, GETVAL, 0));
         //fflush(stdout);
         //P (semid, mutex, reader);
         
         shared -> size = read(src, shared -> buffer, BUF_SIZE);
         //V (semid, mutex, reader);
-        V (semid, full, reader);
+        V (semid, full, empty, reader);
     }
 }
 
@@ -169,7 +169,7 @@ void consume (int semid, in_data *shared) {
     int size = 1;
     while (size > 0)
     {
-        P (semid, full, writer);
+        P (semid, full, empty, writer);
         //printf("%d\n", semctl(semid, mutex, GETVAL, 0));
         //fflush(stdout);
         //P (semid, mutex, writer);
@@ -178,20 +178,28 @@ void consume (int semid, in_data *shared) {
         size = shared -> size;
         fflush (stdout);
         //V (semid, mutex, writer);
-        V (semid, empty, writer);
+        V (semid, empty, full, writer);
     }
 }
 
-void P (int semid, int sem, int sem_exist) {
+void P (int semid, int sem, int sem_mod, int sem_exist) {
     sembuf ops [3];
 
     ops [0].sem_num = sem_exist;
     ops [0].sem_op = -1;
     ops [0].sem_flg = IPC_NOWAIT;
 
+    ops [2].sem_num = sem_mod;
+    ops [2].sem_op = -1;
+    ops [2].sem_flg = IPC_NOWAIT;
+
     ops [1].sem_num = sem;
     ops [1].sem_op = -1;
     ops [1].sem_flg = SEM_UNDO;
+
+    ops [2].sem_num = sem_mod;
+    ops [2].sem_op  = 1;
+    ops [2].sem_flg = SEM_UNDO;
 
     ops [2].sem_num = sem_exist;
     ops [2].sem_op = 1;
@@ -204,16 +212,24 @@ void P (int semid, int sem, int sem_exist) {
     }
 }
 
-void V (int semid, int sem, int sem_exist) {
+void V (int semid, int sem, int sem_mod, int sem_exist) {
     sembuf ops [3];
 
     ops [0].sem_num = sem_exist;
     ops [0].sem_op = -1;
     ops [0].sem_flg = IPC_NOWAIT;
 
+    ops [2].sem_num = sem_mod;
+    ops [2].sem_op  = 1;
+    ops [2].sem_flg = SEM_UNDO;
+
     ops [1].sem_num = sem;
     ops [1].sem_op = 1;
     ops [1].sem_flg = SEM_UNDO;
+
+    ops [2].sem_num = sem_mod;
+    ops [2].sem_op = -1;
+    ops [2].sem_flg = IPC_NOWAIT;
 
     ops [2].sem_num = sem_exist;
     ops [2].sem_op = 1;

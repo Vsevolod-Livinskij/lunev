@@ -81,7 +81,7 @@ int main(int argc, char *argv []) {
                 }
             }
         }
-        kill (ppid, SIGCHLD);
+        //kill (ppid, SIGCHLD);
     }
     else {
         zero = 0;
@@ -131,6 +131,6 @@ int main(int argc, char *argv []) {
         }  
     }
 
-    wait (NULL);
+    //wait (NULL);
     return 0;
 }

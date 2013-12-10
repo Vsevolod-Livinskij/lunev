@@ -135,17 +135,17 @@ int main (int argc, char *argv []) {
     else if (errno == EEXIST) {  //someone else got it first
         
         semid = semget (key, nsems, 0);
-        unsigned short *ptr = (unsigned short *) 
-                            calloc (nsems, sizeof (unsigned short));
-        semctl (semid, mutex, GETALL, ptr);
-        if (ptr [mutex] != 1 || ptr [full] != 0 || ptr [empty] != buf_num) {
-            SemInit();
-        }
         if (semid < 0) {
             fprintf (stderr, "Failed to open semaphore\n");
             semctl (semid, 0, IPC_RMID, NULL);
             shmdt (shared);
             exit(EXIT_FAILURE);
+        }
+        unsigned short *ptr = (unsigned short *) 
+                            calloc (nsems, sizeof (unsigned short));
+        semctl (semid, mutex, GETALL, ptr);
+        if (ptr [mutex] != 1 || ptr [full] != 0 || ptr [empty] != buf_num) {
+            SemInit();
         }
     }
     else {
