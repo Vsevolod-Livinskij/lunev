@@ -28,17 +28,13 @@ int main (int argc, char *argv []) {
         int pid = getpid();
         char name_buffer [NAME_LENGTH];
         sprintf(name_buffer, "%d", pid);
-        for (int i = strlen (name_buffer); i < NAME_LENGTH; i++)
+        for (int i = strlen (name_buffer); i < NAME_LENGTH - 1; i++)
             name_buffer [i] = '!';
         name_buffer [NAME_LENGTH - 1] = '\0';
         
         int tmp = CreateAndOpenFifo(name_buffer, O_RDONLY | O_NONBLOCK); 
         int data_fifo = OpenFifo(name_buffer, O_WRONLY | O_NONBLOCK);
-        
-        char buffer [BUFFER_SIZE] = {}; 
-        int ret_num = 1;    
-        
-        close(tmp);
+        close(tmp);     
         
         int sync_fifo = CreateAndOpenFifo(SYNC_FIFO_NAME, O_WRONLY);
         if (write(sync_fifo, name_buffer, NAME_LENGTH) < NAME_LENGTH) {
@@ -50,8 +46,9 @@ int main (int argc, char *argv []) {
         sleep(1);
         
         ExcludeNONBLOCK(data_fifo);
-        
-        ret_num = 1;
+                
+        char buffer [BUFFER_SIZE] = {}; 
+        int ret_num = 1;   
         while(ret_num) {
             ret_num = read(src, buffer, BUFFER_SIZE);
             ret_num = write(data_fifo, buffer, ret_num);
