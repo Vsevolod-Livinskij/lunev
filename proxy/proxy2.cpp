@@ -23,30 +23,71 @@ struct child_io {
 void Child_Start (child_io childs);
 
 int main (int argc, char *argv []) {// ./a.out 15 in.txt
+    if (argc != 3){
+		perror ("Less then 3 arguments\n");
+		exit (EXIT_FAILURE);
+	}
+    int N = 0;
+	if (sscanf(argv[1], "%u", &N) == 0){
+		perror("Second argument is not number\n");
+		exit (EXIT_FAILURE);
+	}
+    
+    printf ("!!!!!!!!!!!!!!!\n%u\n!!!!!!!!!!!!!!!!!!!!!\n", N);
+    
     int tmp_fd [2], max_fd = 0;
-    int N = atoi (argv [1]);
+    
     child_io childs [N];
 
     for (int i = 0; i < N; i++) {
-        pipe (tmp_fd);
+        /*
+        //pipe (tmp_fd);
         if (i == 0) {
             childs[i].child_fd [0] = open(argv [2], O_RDONLY);
-            max_fd = tmp_fd [1];
+            //max_fd = tmp_fd [1];
         }
         else {
-            childs[i].child_fd [0] = tmp_fd [0];
+            //childs[i].child_fd [0] = tmp_fd [0];
+            //max_fd  = MAX(max_fd, tmp_fd [0]);
+            
+            pipe (tmp_fd);
+            childs[i - 1].child_fd [1] = tmp_fd [1];
+            max_fd  = MAX(max_fd, tmp_fd [1]);
+            childs[i - 1].parent_fd [0] = tmp_fd [0];
+            fcntl(childs[i - 1].parent_fd [0], F_SETFL, O_NONBLOCK);
             max_fd  = MAX(max_fd, tmp_fd [0]);
+            
         }
+        pipe(tmp_fd);
         childs[i].parent_fd [1] = tmp_fd [1];
         fcntl(childs[i].parent_fd [1], F_SETFL, O_NONBLOCK);
         max_fd  = MAX(max_fd, tmp_fd [1]);
-        
+/*        
         pipe (tmp_fd);
         childs[i - 1].child_fd [1] = tmp_fd [1];
         max_fd  = MAX(max_fd, tmp_fd [1]);
         childs[i - 1].parent_fd [0] = tmp_fd [0];
-        fcntl(childs[i].parent_fd [0], F_SETFL, O_NONBLOCK);
+        fcntl(childs[i - 1].parent_fd [0], F_SETFL, O_NONBLOCK);
         max_fd  = MAX(max_fd, tmp_fd [0]);        
+*/        
+
+
+        if (i != 0) {
+            pipe (tmp_fd);
+            childs[i - 1].child_fd [0] = tmp_fd [0];
+            max_fd  = MAX(max_fd, tmp_fd [0]);
+            childs[i - 1].parent_fd [1] = tmp_fd [1];
+            fcntl(childs[i - 1].parent_fd [1], F_SETFL, O_NONBLOCK);
+            max_fd  = MAX(max_fd, tmp_fd [1]);
+        }
+        
+        pipe (tmp_fd);
+        childs[i].child_fd [1] = tmp_fd [1];
+        max_fd  = MAX(max_fd, tmp_fd [1]);
+        childs[i].parent_fd [0] = tmp_fd [0];
+        fcntl(childs[i].parent_fd [0], F_SETFL, O_NONBLOCK);
+        max_fd  = MAX(max_fd, tmp_fd [0]);
+        
         
         childs[i].size = 3 * BUF_SIZE_NUM * (N - i + 1);
         if (childs[i].size > MAX_BUF_SIZE)
@@ -55,15 +96,18 @@ int main (int argc, char *argv []) {// ./a.out 15 in.txt
         childs[i].eof = false;
         childs[i].position = 0;
             
+        if (i == 0) 
+                childs[i].child_fd [0] = open(argv [2], O_RDONLY);
+                    
         int pid = fork ();
         if (pid == 0) {
             for (int j = 0; j < i; j++) {
-
                 close (childs[j].parent_fd [0]);
                 close (childs[j].parent_fd [1]);
             }
             
-            close (childs[i].parent_fd [0]);
+            //close (childs[i].parent_fd [0]);
+            close (childs[i].parent_fd [1]);
             
             Child_Start(childs [i]);
             exit (EXIT_SUCCESS);
@@ -164,6 +208,7 @@ void Child_Start (child_io childs) {
     ssize_t ret_num = 1;
     while (1) {
         ret_num = read (childs.child_fd [0], buf, MAX_BUF_SIZE);
+        sleep (10);
         if (ret_num == 0) 
             break;
        
