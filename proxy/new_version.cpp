@@ -18,14 +18,14 @@ struct child_io {
     bool eof;
 };
 
-#define MAX_BUF_SIZE 1024*128
+#define MAX_BUF_SIZE 1021*128
 #define BUF_SIZE_NUM 128
 
 void Child_Start (child_io child);
 
 int main (int argc, char* argv [0]) {
     if (argc != 3){
-		perror ("Less then 3 arguments\n");
+		perror ("Wrong number of arguments\n");
 		exit (EXIT_FAILURE);
 	}
     int N = 0;
@@ -41,7 +41,7 @@ int main (int argc, char* argv [0]) {
     for (int i = 0; i < N; i++) {
         if (i != 0) {
             pipe (fd_tmp);
-            child[i - 1].ch_fd [0] = fd_tmp [0];
+            child[i].ch_fd [0] = fd_tmp [0];
             fd_max  = MAX(fd_max, fd_tmp [0]);
             
             child[i - 1].par_fd [1] = fd_tmp [1];
@@ -57,7 +57,7 @@ int main (int argc, char* argv [0]) {
         fcntl(child[i].par_fd [0], F_SETFL, O_NONBLOCK);
         fd_max  = MAX(fd_max, fd_tmp [0]);
         
-        child[i].size = 3 * BUF_SIZE_NUM * (N - i + 1);
+        child[i].size = 3 * 1021 * (N - i + 1);
         if (child[i].size > MAX_BUF_SIZE)
             child[i].size = MAX_BUF_SIZE -1;
         child[i].buf= (char*) malloc(child[i].size);    
@@ -131,7 +131,7 @@ int main (int argc, char* argv [0]) {
             else if ((child[fd_num].pos += nread) == child[fd_num].size)
                 FD_CLR(child[fd_num].par_fd [0], &read_fds);
             if (child[fd_num].pos != 0)
-                FD_SET(child[fd_num].par_fd [0], &write_fds);
+                FD_SET(child[fd_num].par_fd [1], &write_fds);
         }
         
         flag = false;
@@ -147,8 +147,10 @@ int main (int argc, char* argv [0]) {
                                       child[fd_num].buf, 
                                       child[fd_num].pos);
             if (nwritten < child[fd_num].pos) {
-                memcpy (&child[fd_num].buf [0], &child[fd_num].buf [nwritten + 1],
-                        sizeof (char) * (child[fd_num].size - child[fd_num].pos));
+                //memcpy (&child[fd_num].buf [0], &child[fd_num].buf [nwritten + 1],
+                //        sizeof (char) * (child[fd_num].size - child[fd_num].pos));
+                for (int j= 0; j < (child[fd_num].pos-nwritten); j++)
+					child[fd_num].buf[j]= child[fd_num].buf[j+nwritten];
 				child[fd_num].pos -= nwritten;
 			}
 			else {
@@ -176,7 +178,7 @@ void Child_Start (child_io child) {
     char *buf = (char*) calloc(BUF_SIZE_NUM, sizeof (char));
     ssize_t ret_num = 1;
     while (1) {
-        ret_num = read (child.ch_fd [0], buf, MAX_BUF_SIZE);
+        ret_num = read (child.ch_fd [0], buf, BUF_SIZE_NUM * sizeof (char));
         if (ret_num == 0) 
             break;
        
