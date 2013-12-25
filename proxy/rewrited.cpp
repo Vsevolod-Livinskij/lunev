@@ -51,8 +51,9 @@ void Child::set_value (int _num, buf_t _size) {
 void Child::receive () {
     int ret_num = read (fd [in], &(buffer [position]), size - position);
     
-    //fprintf (stderr, "\n!!Parent #%d read %d bytes\n", num, ret_num);
-    //fflush (stderr);
+    /*
+    fprintf (stderr, "\n!!Parent #%d read %d bytes\n", num, ret_num);
+    //fflush (stderr);*/
     
     if (ret_num <= 0) 
         eof = true; 
@@ -61,20 +62,23 @@ void Child::receive () {
         position += ret_num;
     if (position == size) 
         full = true;   
+    /*
     if (position == 0)
-        empty = true;
+        empty = true;*/
 };
 
 void Child::send () {
     int ret_num = write (fd [out], buffer, position);
-    //fprintf (stderr, "\n!!Parent #%d write %d bytes\n", num, ret_num);
-    //fflush (stderr);
+    /*
+    fprintf (stderr, "\n!!Parent #%d write %d bytes\n", num, ret_num);
+    fflush (stderr);*/
     
     if (ret_num > 0) {
         full = false;
-        //memcpy (buffer, &(buffer [ret_num]), position - ret_num);
+        memcpy (buffer, &(buffer [ret_num]), position - ret_num);
+        /*
         for (buf_t i = 0; i < position - ret_num; i++)
-            buffer[i] = buffer[i + ret_num];
+            buffer[i] = buffer[i + ret_num];*/
         position -= ret_num;
     }
     else position = 0;
@@ -126,21 +130,24 @@ void Receiver::receive () {
         exit (EXIT_SUCCESS);
     }
     
-    //if (num ==  && position != 0) {
-        //fprintf (stderr, "\n!!Child #%d read %d bytes\n", num, position);
-        //fflush (stderr);
-    //}
+    /*
+    if (num ==  && position != 0) {
+        fprintf (stderr, "\n!!Child #%d read %d bytes\n", num, position);
+        fflush (stderr);
+    }*/
 }
 
 void Receiver::send () {
     int tmp_num = position;
     while (tmp_num > 0) {
         int ret_num = write (fd [out], buffer, position);
-        //fprintf (stderr, "\n!!Child #%d write %d bytes\n", num, ret_num);
-        //fflush (stderr);
-        //memcpy (&(buffer [0]), &(buffer [ret_num]), position - ret_num);
+        /*
+        fprintf (stderr, "\n!!Child #%d write %d bytes\n", num, ret_num);
+        fflush (stderr);*/
+        memcpy (&(buffer [0]), &(buffer [ret_num]), size - ret_num);
+        /*
         for (buf_t i = 0; i < size - ret_num; i++)
-            buffer[i]= buffer[i + ret_num];
+            buffer[i]= buffer[i + ret_num];*/
         tmp_num -= ret_num;
     }
 }
@@ -190,14 +197,14 @@ int main (int argc, char *argv []) {
   
         int pid = fork ();
         if (pid == 0) {
-            for (int j = 0; j < i; j++) {
+            for (int j = 0; j <= i; j++) {
                 close (child[j].fd [in]);
                 close (child[j].fd [out]);
             }
-            
+            /*
             close (child[i].fd [out]);
             close (child[i].fd [in]);
-            
+            */
             receivers[i].commit ();
         }
         
@@ -224,9 +231,10 @@ int main (int argc, char *argv []) {
     fd_set readfds_prev, writefds_prev;
     
     int control_sum = child_num; 
-    while(1) {
+    while(control_sum) {
         readfds_prev = read_fds;
         writefds_prev = write_fds;
+        /*
         bool flag = true;
         for (int i = 0; i < child_num; i++) {
             if (FD_ISSET(child[i].fd [in], &readfds_prev) ||
@@ -234,14 +242,14 @@ int main (int argc, char *argv []) {
                 flag = false;
         }
         if (flag)
-            break;
+            break;*/
         select (fd_max + 1, &readfds_prev, &writefds_prev, NULL, NULL);
         
         
         for (int i = 0; i < child_num; i++) {
             if (FD_ISSET(child[i].fd [in], &readfds_prev)) {
                 child[i].receive();
-                if (child[i].eof) 
+                if (child[i].eof)                           // Unable to read
                     FD_CLR(child[i].fd [in], &read_fds);
                 if (child[i].full) 
                     FD_CLR(child[i].fd [in], &read_fds);
@@ -251,7 +259,8 @@ int main (int argc, char *argv []) {
                 
             if (FD_ISSET(child[i].fd [out], &writefds_prev)) {
                 child[i].send();
-                if (child[i].eof && child[i].empty) {
+                if (child[i].eof && child[i].empty) {       // End of transmission
+                    control_sum--;
                     FD_CLR (child[i].fd [out], &write_fds);
                     FD_CLR(child[i].fd [in], &read_fds);
                     close (child[i].fd [in]);
@@ -260,7 +269,7 @@ int main (int argc, char *argv []) {
                     continue;
                 }                    
                 if (child[i].empty)
-                    FD_CLR (child[i].fd [out], &write_fds);
+                    FD_CLR (child[i].fd [out], &write_fds); // Unable to write
                     
                 FD_SET(child[i].fd [in], &read_fds);
             }
