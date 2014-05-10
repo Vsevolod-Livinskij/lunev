@@ -1,0 +1,6 @@
+#!/bin/bash
+    for i in 1 2 4 8 
+    do  
+        echo "$i thread" >> log.txt
+        time python count.py 0 45 1000000000 $i >> log.txt
+    done
