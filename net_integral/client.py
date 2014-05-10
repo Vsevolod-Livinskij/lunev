@@ -1,5 +1,8 @@
 import socket
 import sys
+import select
+
+bufferSize = 1024
 
 class Client():
     def __init__ (self, host, port):
@@ -20,10 +23,21 @@ class Client():
  
     def send (self, msg):
         self.socket.sendall (msg)
-        print self.socket.recv(1024)
+        print self.socket.recv(bufferSize)
  
+########################################################################
  
-HOST, PORT = "127.0.0.1", 10345
-client = Client (HOST, PORT)
+#HOST = "127.0.0.1"
+PORT_UDP = 10345
+PORT_TCP = 11345
+
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(("", PORT_UDP))
+#result = select.select([s],[],[])
+#msg = result[0][0].recv(bufferSize) 
+msg, addr = s.recvfrom (bufferSize)
+print "Server IP: " + msg
+
+client = Client (msg, PORT_TCP)
 client.send("haha")
 client.socket.close()
